@@ -1,0 +1,36 @@
+{
+  "id": "orb-frenzy-3d",
+  "name": "Orb Frenzy 3D",
+  "tagline": "Drop orbs. Merge them. Grow the frenzy.",
+  "description": "A physics merge puzzle built in Unity and rendered straight from the WebGL player: glossy faceted orbs with faces, real light, and a container that answers every drop. Pick your column, drop an orb, and identical tiers fuse on contact into the next orb up - eleven tiers from a tiny Spark Orb to a white-hot Infinity Orb. A fuse that sets off another fuse scores a chain, and chains are where the score really comes from. Merge two Infinity Orbs and the whole board goes up in a Cosmic Burst. The container only holds so much, so every drop is a bet on where the stack is going; when the pile breaches the line, the run ends. Progress - best score, best chain, highest tier reached, runs played - saves locally, and follows you between devices when you sign in with a Little Joy Arcade account.",
+  "categories": ["Puzzle", "Casual", "Arcade"],
+  "runtime": "Unity WebGL",
+  "version": "0.1.0",
+  "updated": "2026-11-11",
+  "status": "live",
+  "featured": false,
+  "playUrl": "https://jd4rider.github.io/orb-frenzy-3d-web/play/",
+  "siteUrl": "https://jd4rider.github.io/orb-frenzy-3d-web/",
+  "repoUrl": "https://github.com/jd4rider/orb-frenzy-3d-web",
+  "releasesUrl": "https://github.com/jd4rider/orb-frenzy-3d-web/releases",
+  "downloads": [],
+  "cover": { "from": "#120a20", "to": "#2a1258", "emoji": "🔮" },
+  "highlights": [
+    "Native Unity WebGL build with real 3D orbs, not sprites standing in for them",
+    "Eleven tiers, each a distinct hue - Spark, Pebble, Glow, Pulse, Prism, Nova, Radiant, Comet, Titan, Celestial, Infinity",
+    "Orbs with faces: they blink, wobble and react to what is happening in the container",
+    "Chain reactions score a multiplier, and two Infinity Orbs set off a Cosmic Burst",
+    "Physics-driven stacking: every drop lands differently, so the board is never the same twice",
+    "Playfield reframes itself to any canvas, portrait or landscape",
+    "Progress saves locally and syncs to your Little Joy Arcade account, and plays offline without one"
+  ],
+  "howToPlay": [
+    "Open the game and wait for the Unity progress bar - the first load streams the whole player",
+    "Move left and right to choose the column, then drop: the orb falls and settles on the stack",
+    "Land two orbs of the same tier touching and they fuse into the next tier up - bigger orb, more points",
+    "A fuse that triggers another fuse scores a chain. Set off a long chain and the multiplier climbs fast",
+    "Keep the stack under the danger line - if the container overflows, the run is over",
+    "Chase two Infinity Orbs into each other for a Cosmic Burst"
+  ],
+  "saveKey": "lja:orb-frenzy-3d:unity-save"
+}

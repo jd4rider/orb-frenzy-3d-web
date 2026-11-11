@@ -32,10 +32,44 @@
   var META_KEY = 'lja:mirror:' + GAME_ID
   var EXCLUDE = /^(lja:|sb-|supabase\.)/
 
+  // Games hosted on the same origin share one localStorage (every github.io
+  // build lives under jd4rider.github.io), so mirroring every key uploads
+  // other games' saves and lets one game's sync overwrite another's. Only
+  // mirror this game's own keys: declared with data-save-keys / LJA_SAVE_KEYS,
+  // or named after the game (`<id>-save...`, dashes optional).
+  var SAVE_KEYS = (function () {
+    var raw = (script && script.dataset.saveKeys) || window.LJA_SAVE_KEYS || ''
+    var list = Array.isArray(raw) ? raw : String(raw).split(',')
+    return list
+      .map(function (key) {
+        return String(key).trim()
+      })
+      .filter(Boolean)
+  })()
+  var COMPACT_ID = GAME_ID.replace(/-/g, '')
+
+  function ownKey(key) {
+    if (SAVE_KEYS.length) return SAVE_KEYS.indexOf(key) !== -1
+    return key.indexOf(GAME_ID + '-') === 0 || key.indexOf(COMPACT_ID + '-') === 0
+  }
+
   var statusText = 'Not signed in'
   var root = null
   var ui = {}
   var busy = false
+
+  // Portal handoff. The catalogue lives on littlejoyarcade.site while every
+  // game runs on its own origin, so a signed-in player would otherwise have to
+  // sign in again inside each game. Those are the only origins whose
+  // `lja:session` messages are trusted; anything else is ignored.
+  var PORTAL_ORIGINS = [
+    'https://littlejoyarcade.site',
+    'https://www.littlejoyarcade.site',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]
+  var portalOrigin = null
+  var viaPortal = false
 
   function url(path) {
     return API + path
@@ -69,6 +103,70 @@
       localStorage.removeItem(SESSION_KEY)
     } catch (error) {
       /* ignore */
+    }
+  }
+
+  // Tell the portal what this game did, so signing in (or out) here updates the
+  // header on littlejoyarcade.site instead of leaving two separate accounts.
+  function notifyPortal() {
+    if (!portalOrigin) return
+    var payload = { type: 'lja:auth', gameId: GAME_ID, session: loadSession() }
+    try {
+      if (window.parent !== window) window.parent.postMessage(payload, portalOrigin)
+    } catch (error) {
+      /* ignore */
+    }
+    // A game opened with "Open in new tab" is not embedded, so the portal is
+    // its opener rather than its parent. Keep it in step too.
+    try {
+      if (window.opener && !window.opener.closed) window.opener.postMessage(payload, portalOrigin)
+    } catch (error) {
+      /* ignore */
+    }
+  }
+
+  function adoptSession(session) {
+    if (session && session.access_token && session.user) {
+      var current = loadSession()
+      var same = current && current.access_token === session.access_token
+      saveSession(session)
+      viaPortal = true
+      if (!same) statusText = 'Signed in via Little Joy Arcade'
+      render()
+      syncNow('portal')
+      return
+    }
+    if (!session && loadSession()) {
+      clearSession()
+      viaPortal = false
+      statusText = 'Signed out'
+      render()
+    }
+  }
+
+  function listenForPortal() {
+    window.addEventListener('message', function (event) {
+      if (!event.data || event.data.type !== 'lja:session') return
+      if (PORTAL_ORIGINS.indexOf(event.origin) === -1) return
+      portalOrigin = event.origin
+      adoptSession(event.data.session || null)
+    })
+    var ready = { type: 'lja:ready', gameId: GAME_ID, configured: CONFIGURED }
+    if (window.parent !== window) {
+      try {
+        window.parent.postMessage(ready, '*')
+      } catch (error) {
+        /* ignore */
+      }
+    }
+    // Same handshake for a tab the portal opened: the opener answers with the
+    // signed-in session, which this origin then keeps in localStorage.
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.postMessage(ready, '*')
+      } catch (error) {
+        /* ignore */
+      }
     }
   }
 
@@ -108,7 +206,7 @@
     try {
       for (var i = 0; i < localStorage.length; i += 1) {
         var key = localStorage.key(i)
-        if (!key || EXCLUDE.test(key)) continue
+        if (!key || EXCLUDE.test(key) || !ownKey(key)) continue
         out[key] = localStorage.getItem(key)
       }
     } catch (error) {
@@ -232,10 +330,16 @@
       var local = snapshot()
       var localHash = hash(JSON.stringify(local))
       var hasLocalKeys = Object.keys(local).length > 0
-      var dirty = meta ? localHash !== meta.hash : hasLocalKeys
+      // Having local keys is not the same as having new edits. On a first sync
+      // (no meta for this device) the cloud copy wins, so a device that had
+      // played before signing in can no longer publish its older save over a
+      // newer one from another device. Only a device that changed since its
+      // last sync is dirty.
+      var dirty = meta ? localHash !== meta.hash : false
 
-      if (dirty) {
-        // This device has changes (or the first save on it): publish them.
+      if (dirty && hasLocalKeys) {
+        // This device has changes: publish them. Never push an empty snapshot,
+        // which would replace the cloud copy with nothing.
         var pushed = await pushSnapshot(local)
         statusText = pushed ? 'Saved to the cloud' : 'Could not reach the cloud'
         render()
@@ -290,9 +394,11 @@
       })
       if (!res.ok) return { error: data.error_description || data.msg || data.error || 'Sign-in failed' }
       saveSession(data)
+      viaPortal = false
       statusText = 'Signed in'
       render()
       await syncNow('sign-in')
+      notifyPortal()
       return { error: null }
     } catch (error) {
       return { error: 'Could not reach Little Joy Arcade. Check your connection.' }
@@ -315,9 +421,11 @@
       }
       if (data.access_token) {
         saveSession(data)
+        viaPortal = false
         statusText = 'Account created'
         render()
         await syncNow('sign-up')
+        notifyPortal()
         return { error: null, needsConfirmation: false }
       }
       return { error: null, needsConfirmation: true }
@@ -329,8 +437,10 @@
   async function signOut() {
     var session = loadSession()
     clearSession()
+    viaPortal = false
     statusText = 'Signed out — progress stays on this device'
     render()
+    notifyPortal()
     if (session && session.access_token) {
       fetch(url('/auth/v1/logout'), { method: 'POST', headers: headers(session.access_token) }).catch(function () {})
     }
@@ -355,6 +465,9 @@
     ui.signedOut.hidden = !!user
     ui.signedIn.hidden = !user
     ui.who.textContent = user ? user.email || 'Signed in' : ''
+    if (user && viaPortal && !/synced|saved to the cloud|up to date|offline|syncing/i.test(statusText)) {
+      statusText = 'Signed in via Little Joy Arcade'
+    }
     ui.status.textContent = statusText
     ui.toggle.textContent = user ? '✓' : '👤'
     ui.toggle.title = user ? 'Little Joy account — ' + (user.email || 'signed in') : 'Sign in to save across devices'
@@ -504,6 +617,7 @@
       // Never show a button that cannot work.
       return
     }
+    listenForPortal()
     buildUi()
     if (new URLSearchParams(location.search).get('lja') === 'login' || location.hash === '#login') {
       ui.panel.hidden = false

@@ -137,9 +137,11 @@ renders is pinned with an inline style, so the page raises it over the Unity foo
 `arcade-unity.js` is **not** canonical — it is this game's shim, and its game-id fallback is
 `orb-frenzy-3d`.
 
-The fill-the-window patch is safe for this game because `Presentation/CameraFramer` reframes
-the playfield to whatever canvas it is given, and `GameHUD` scales its canvas with
-`ScaleWithScreenSize` at a 0.5 width/height match.
+The fill-the-window patch is safe for this game because `Presentation/PortraitFrame` pins the
+render to a centred 9:16 column whatever the page gives it, `PortraitLetterbox` masks the
+leftover bands, `CameraFramer` reframes the playfield inside that column and `GameHUD` sizes
+its canvas to it with `ConstantPixelSize`. A wide player frame therefore shows a portrait
+game rather than a stretched one.
 
 ## Save format
 
